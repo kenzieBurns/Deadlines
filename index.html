@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Deadline Board</title>
+<meta name="description" content="Paste your messy assignment notes and get a deadline board: countdown to the next hand-in, crunch-week warnings, a six-week calendar and module weightings.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='3' y='5' width='26' height='24' rx='5' fill='%232f5bd3'/><rect x='3' y='5' width='26' height='7' rx='3' fill='%23c8313a'/><circle cx='11' cy='19' r='2.5' fill='white'/><circle cx='21' cy='19' r='2.5' fill='white'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: countdown strip on top, six-week calendar, then deadline list grouped by urgency, then module weights. */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --fg:#17202e; --muted:#5d6878; --line:#dde2ea;
+  --accent:#2f5bd3; --accent-soft:#e6ecfb;
+  --red:#c8313a; --red-soft:#fbe7e8; --amber:#b86a00; --amber-soft:#fdf0dc; --green:#2a7d4f; --green-soft:#e2f3e9;
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --body:"Instrument Sans",ui-sans-serif,system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#10141b; --surface:#181e28; --fg:#e8ecf2; --muted:#98a3b3; --line:#2a3240;
+  --accent:#7d9cff; --accent-soft:#1f2a45;
+  --red:#ff7178; --red-soft:#3a1e22; --amber:#f2a33c; --amber-soft:#3a2b14; --green:#5fcf8e; --green-soft:#16301f; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#10141b; --surface:#181e28; --fg:#e8ecf2; --muted:#98a3b3; --line:#2a3240;
+  --accent:#7d9cff; --accent-soft:#1f2a45;
+  --red:#ff7178; --red-soft:#3a1e22; --amber:#f2a33c; --amber-soft:#3a2b14; --green:#5fcf8e; --green-soft:#16301f; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.5}
+.wrap{max-width:980px;margin:0 auto;padding-block:28px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:28px}
+h1,h2{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+h1{font-size:clamp(28px,5vw,40px);font-weight:700}
+h2{font-size:20px;font-weight:700}
+.eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+header{display:flex;flex-wrap:wrap;justify-content:space-between;gap:16px;align-items:end}
+.hdr-right{display:grid;gap:8px;justify-items:end}
+.today{color:var(--muted)}
+.next{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;display:flex;flex-wrap:wrap;gap:20px;align-items:center}
+.next .big{font-family:var(--display);font-size:56px;font-weight:700;line-height:1;color:var(--red)}
+.next .big small{font-size:18px;color:var(--muted);font-weight:500;margin-left:6px}
+.next .what{min-width:0;flex:1 1 240px}
+.next .what b{font-size:18px;display:block}
+.crunch{border-left:4px solid var(--red);background:var(--red-soft);border-radius:0 12px 12px 0;padding:14px 18px}
+.crunch b{color:var(--red)}
+.section{display:grid;gap:12px}
+/* buttons */
+.btn{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:8px;padding:7px 12px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn:disabled{opacity:.5;cursor:wait}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.btn.danger{color:var(--red)}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.welcome{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:28px 24px;display:grid;gap:12px;justify-items:start}
+.welcome p{margin:0;max-width:62ch}
+/* calendar */
+.cal-scroll{overflow-x:auto}
+.cal{display:grid;grid-template-columns:52px repeat(7,minmax(38px,1fr));gap:4px;min-width:340px}
+.cal .dh{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);text-align:center;padding-bottom:2px}
+.cal .wk{font-size:11px;color:var(--muted);display:flex;align-items:flex-start;padding-top:6px}
+.day{background:var(--surface);border:1px solid var(--line);border-radius:8px;min-height:64px;padding:5px 6px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.day .n{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.day.past{opacity:.45}
+.day.today{outline:2px solid var(--accent);outline-offset:-1px}
+.day.today .n{color:var(--accent);font-weight:700}
+.day.hot{background:var(--red-soft);border-color:var(--red)}
+.chip{font-size:10.5px;line-height:1.25;border-radius:4px;padding:2px 4px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip.r{background:var(--red);color:var(--surface)}
+.chip.a{background:var(--amber-soft);color:var(--amber)}
+.chip.g{background:var(--green-soft);color:var(--green)}
+.chip.i{background:var(--accent-soft);color:var(--accent)}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+/* list */
+.group{display:grid;gap:8px}
+.group h3{margin:6px 0 0;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.item{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.item .sev{width:6px;align-self:stretch;border-radius:3px}
+.item .t{min-width:0}
+.item .t b{display:block}
+.item .t span{color:var(--muted);font-size:13px}
+.item .when{text-align:right;white-space:nowrap}
+.item .when .d{font-family:var(--mono);font-size:13px;color:var(--muted)}
+.item .when .c{font-family:var(--display);font-weight:700;font-size:20px}
+.item.done{opacity:.45}
+.item.done .t b{text-decoration:line-through}
+.tick{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-top:4px;cursor:pointer}
+.tick input{accent-color:var(--accent)}
+.pill{display:inline-block;font-size:11px;font-weight:600;border-radius:99px;padding:1px 8px;margin-left:6px;vertical-align:2px;background:var(--accent-soft);color:var(--accent)}
+/* modules */
+.mods{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.mod{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:grid;gap:10px;min-width:0;align-content:start}
+.bar{display:flex;height:22px;border-radius:6px;overflow:hidden;gap:2px}
+.bar div{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;font-family:var(--mono);color:var(--surface);min-width:0;overflow:hidden}
+.mod ul{margin:0;padding:0;list-style:none;font-size:13px;display:grid;gap:3px}
+.mod li{display:flex;justify-content:space-between;gap:8px}
+.mod li span:last-child{font-family:var(--mono);color:var(--muted)}
+.quiz{display:flex;gap:4px;flex-wrap:wrap}
+.quiz i{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:11px;font-family:var(--mono);font-weight:600}
+.note{font-size:13px;color:var(--muted)}
+/* editor */
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--bg);color:var(--fg);padding:0;width:min(1000px,calc(100vw - 16px));max-height:calc(100dvh - 16px);overflow:auto}
+dialog::backdrop{background:rgb(0 0 0 / .5)}
+.ed{display:grid;gap:22px;padding:0 20px 20px}
+.ed-head{position:sticky;top:0;z-index:2;background:var(--bg);display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line)}
+.ed h3{margin:0 0 4px;font-family:var(--display);font-size:17px}
+.ed section{display:grid;gap:10px}
+textarea,input,select{font:inherit;font-size:14px;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 9px;min-width:0;width:100%}
+textarea{min-height:170px;resize:vertical;font-family:var(--mono);font-size:12.5px;line-height:1.5}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.rows{display:grid;gap:6px}
+.row{display:grid;grid-template-columns:110px 1.1fr 2fr 140px 96px 1.5fr 32px;gap:6px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:6px}
+.row.m{grid-template-columns:1.2fr 2.2fr 1fr 2fr 32px}
+.row.hd{background:none;border:0;padding:0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.x{font:inherit;font-size:18px;line-height:1;border:0;background:none;color:var(--muted);cursor:pointer;border-radius:6px;height:32px}
+.x:hover{color:var(--red);background:var(--red-soft)}
+.status{font-size:13px;color:var(--muted);min-height:1.5em;margin:0}
+.status.ok{color:var(--green)}.status.err{color:var(--red)}
+details{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+details summary{cursor:pointer;font-size:13px;font-weight:600}
+details .inner{display:grid;gap:8px;margin-top:10px}
+.foot{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;border-top:1px solid var(--line);padding-top:16px}
+@media (max-width:760px){
+  .row,.row.m{grid-template-columns:1fr 1fr}
+  .row .wide{grid-column:1/-1}
+  .row .x{justify-self:end;grid-column:2}
+  .row.hd{display:none}
+}
+@media (max-width:520px){.next .big{font-size:44px}.item{grid-template-columns:auto 1fr}.item .when{grid-column:2;text-align:left;display:flex;gap:10px;align-items:baseline}.hdr-right{justify-items:start}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow" id="label"></div>
+      <h1>What's due, and when</h1>
+    </div>
+    <div class="hdr-right">
+      <div class="today" id="today"></div>
+      <div class="actions"><button class="btn" id="editBtn" type="button">Edit deadlines</button></div>
+    </div>
+  </header>
+
+  <div class="welcome" id="welcome" hidden>
+    <h2>Turn scattered notes into a deadline board</h2>
+    <p>Paste whatever you've got: bits of module handbooks, dates from Moodle, weightings, half-written notes. The board pulls out the deadlines and weightings, counts down to your next hand-in, warns you about crunch weeks and lays everything out on a six-week calendar.</p>
+    <p class="note">Everything is saved in your browser. Nothing is uploaded unless you choose AI conversion.</p>
+    <div class="actions"><button class="btn primary" id="startBtn" type="button">Paste my deadlines</button><button class="btn" id="exampleBtn" type="button">See an example</button></div>
+  </div>
+
+  <div class="next" id="next"></div>
+
+  <div class="crunch" id="crunch" hidden></div>
+
+  <section class="section" id="secCal">
+    <h2>Six-week view</h2>
+    <div class="legend">
+      <span><i style="background:var(--red)"></i>Due within 7 days</span>
+      <span><i style="background:var(--amber-soft);outline:1px solid var(--amber)"></i>8–21 days</span>
+      <span><i style="background:var(--green-soft);outline:1px solid var(--green)"></i>Further off</span>
+      <span><i style="background:var(--accent-soft);outline:1px solid var(--accent)"></i>Not a hand-in</span>
+    </div>
+    <div class="cal-scroll"><div class="cal" id="cal"></div></div>
+  </section>
+
+  <section class="section" id="secList">
+    <h2>Every deadline</h2>
+    <div id="list"></div>
+    <p class="note">Saved in this browser only. To use it on another device, open <b>Edit deadlines</b> and copy the link or download a backup. Where no time was given, the deadline is shown as end of day; check Moodle for the exact time.</p>
+  </section>
+
+  <section class="section" id="secMods">
+    <h2>How each module is weighted</h2>
+    <div class="mods" id="mods"></div>
+  </section>
+</div>
+
+<dialog id="ed" aria-labelledby="edTitle">
+  <div class="ed-head">
+    <h2 id="edTitle">Edit deadlines</h2>
+    <div class="actions"><button class="btn" type="button" id="edCancel">Cancel</button><button class="btn primary" type="button" id="edSave">Save board</button></div>
+  </div>
+  <div class="ed">
+    <section>
+      <div><h3>1. Paste your notes</h3><div class="note">Any format works: copy from handbooks, emails or your own notes. Put each module's name on its own line above its deadlines for best results. Converting adds what it finds to the lists below.</div></div>
+      <textarea id="paste" spellcheck="false" placeholder="e.g.
+Machine Learning:
+* 1st coursework - theory (25%), due 29th October
+* exam paper (50%)
+
+AI
+Coursework (30%) due 27 Nov
+Final exam (70%)"></textarea>
+      <div class="actions"><button class="btn primary" type="button" id="convertBtn">Convert</button><button class="btn" type="button" id="clearPaste">Clear text</button></div>
+      <details id="aiBox">
+        <summary>Better conversion with AI (optional)</summary>
+        <div class="inner">
+          <div class="note">The quick converter uses rules and can miss things. With your own Anthropic API key, Claude reads the notes instead. Your notes go straight from your browser to Anthropic, and the key is stored only in this browser. You can get a key at console.anthropic.com.</div>
+          <input id="apikey" type="password" placeholder="sk-ant-…" autocomplete="off" spellcheck="false">
+          <div class="actions"><button class="btn" type="button" id="aiBtn">Convert with AI</button><button class="btn" type="button" id="forgetKey">Forget key</button></div>
+        </div>
+      </details>
+      <p class="status" id="status" role="status"></p>
+    </section>
+
+    <section>
+      <div><h3>2. Check the deadlines</h3><div class="note">Fix anything that's wrong. Leave the date empty if it isn't known yet. Leave the time empty to mean end of day.</div></div>
+      <label style="display:grid;gap:4px;max-width:360px"><span class="note">Board label</span><input id="edLabel" placeholder="e.g. Semester 1 · 2026"></label>
+      <div class="rows" id="edItems"></div>
+      <div><button class="btn" type="button" id="addItem">+ Add deadline</button></div>
+    </section>
+
+    <section>
+      <div><h3>3. Module weightings</h3><div class="note">Write the parts as <span class="mono">Exam 70, Coursework 30</span>. Quiz scores are optional, e.g. <span class="mono">2,2,1,2</span>.</div></div>
+      <div class="rows" id="edMods"></div>
+      <div><button class="btn" type="button" id="addMod">+ Add module</button></div>
+    </section>
+
+    <div class="foot">
+      <div class="actions">
+        <button class="btn" type="button" id="copyLink">Copy link for another device</button>
+        <button class="btn" type="button" id="backup">Download backup</button>
+        <button class="btn" type="button" id="restore">Restore backup</button>
+        <input type="file" id="restoreFile" accept="application/json,.json" hidden>
+      </div>
+      <div class="actions">
+        <button class="btn" type="button" id="loadExample">Load example</button>
+        <button class="btn danger" type="button" id="clearAll">Clear everything</button>
+      </div>
+    </div>
+  </div>
+  <datalist id="modlist"></datalist>
+</dialog>
+
+<script>
+/* ===== Example board (also the original data this app was built around) ===== */
+const EXAMPLE={label:"Semester 1 · 2026",done:{},items:[
+ {id:"ml1",short:"ML CW1",mod:"Machine Learning",title:"Coursework 1: theoretical exercise",note:"25% of ML",date:"2026-10-29",time:"",kind:"due"},
+ {id:"prof-draft",short:"Prof draft",mod:"Professional Skills",title:"Draft essay for peer review",note:"Peer review is 10% of the essay mark",date:"2026-11-02",time:"16:30",kind:"due"},
+ {id:"prof-peer",short:"Peer notes",mod:"Professional Skills",title:"Peer-review comments released",note:"Read these and revise",date:"2026-11-13",time:"",kind:"info"},
+ {id:"prof-final",short:"Prof essay",mod:"Professional Skills",title:"Final essay (2,000 words)",note:"60% of Prof Skills",date:"2026-11-20",time:"16:30",kind:"due"},
+ {id:"ai-cw",short:"AI CW",mod:"AI",title:"Coursework: code + report",note:"30% of AI (viva is 25% of that)",date:"2026-11-27",time:"",kind:"due"},
+ {id:"ml2",short:"ML CW2",mod:"Machine Learning",title:"Coursework 2: practical exercise",note:"25% of ML",date:"2026-11-27",time:"",kind:"due"},
+ {id:"proj-report",short:"Proj report",mod:"Individual Project",title:"Status report (1–3 pages, four P's)",note:"Description · Progress · Plan · Problems",date:"2026-11-27",time:"",kind:"due"},
+ {id:"ai-viva",mod:"AI",title:"One-to-one coursework viva",note:"Week 9, date to be booked",date:"",time:"",kind:"due"},
+ {id:"algs-prac",mod:"Algorithms",title:"Assessed practical exercise",note:"20% of Algorithms",date:"",time:"",kind:"due"},
+ {id:"algs-quiz",mod:"Algorithms",title:"Weekly quizzes",note:"10% of Algorithms, every week",date:"",time:"",kind:"note"},
+ {id:"exams",mod:"All modules",title:"Exams: AI 70%, Algs 70%, ML 50%, Prof 40%",note:"Exam diet dates not yet given",date:"",time:"",kind:"note"},
+],modules:[
+ {name:"Individual Project",parts:[["Dissertation",85],["Conduct",10],["Presentation",5]],quiz:[],note:"Status report due 27 Nov feeds into this."},
+ {name:"AI",parts:[["Exam",70],["Coursework",30]],quiz:[],note:"Coursework includes a viva in Week 9 worth 25% of the coursework mark. Analysis in the report counts more than the code."},
+ {name:"Algorithms",parts:[["Exam (90 min)",70],["Practical",20],["Quizzes",10]],quiz:[2,2,2,2,1,2,2,1,2],quizMax:2,note:""},
+ {name:"Professional Skills",parts:[["Essay",60],["Exam (1 hr)",40]],quiz:[],note:"Exam: 2 scenarios, 3–4 questions each, on legal, ethical and social issues."},
+ {name:"Machine Learning",parts:[["Exam",50],["CW1 theory",25],["CW2 practical",25]],quiz:[],note:""},
+]};
+
+/* ===== State ===== */
+const KEY="deadline-board-v1",DAY=864e5,$=id=>document.getElementById(id);
+const blank=()=>({label:"My deadlines",items:[],modules:[],done:{}});
+const clone=o=>JSON.parse(JSON.stringify(o));
+const uid=()=>Math.random().toString(36).slice(2,10);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const str=v=>typeof v==="string"?v.trim():v==null?"":String(v).trim();
+function load(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&Array.isArray(s.items))return{...blank(),...s,done:s.done||{}}}catch(e){}return blank()}
+function persist(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+let S=load(),V=[],now,startToday;
+
+/* ===== Board ===== */
+const fmtD=d=>d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"});
+const fmtT=d=>d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
+function daysLeft(d){const dd=new Date(d.getFullYear(),d.getMonth(),d.getDate());return Math.round((dd-startToday)/DAY)}
+function sev(it){if(it.kind==="info")return"i";const n=daysLeft(it.d);return n<=7?"r":n<=21?"a":"g"}
+function abbr(m){const w=m.split(/\s+/).filter(Boolean);if(w.length>1)return w.map(x=>x[0]).join("").slice(0,3).toUpperCase();return m.length<=4?m:m.slice(0,4)}
+function shortOf(i){return i.short||abbr(i.mod)+" "+((i.title.split(/\s+/)[0]||"").replace(/[^\w-]/g,""))}
+
+function derive(){
+  V=S.items.map(it=>({...it,d:/^\d{4}-\d{2}-\d{2}$/.test(it.date||"")?new Date(it.date+"T"+(it.time||"23:59")):null}));
+}
+const dated=()=>V.filter(i=>i.d).sort((a,b)=>a.d-b.d);
+
+function renderHeader(){
+  $("label").textContent=S.label||"My deadlines";
+  $("today").textContent="Today: "+now.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+  const empty=!S.items.length&&!S.modules.length;
+  $("welcome").hidden=!empty;
+  $("next").hidden=empty;
+  $("secCal").hidden=$("secList").hidden=!S.items.length;
+  $("secMods").hidden=!S.modules.length;
+  $("editBtn").textContent=empty?"Add deadlines":"Edit deadlines";
+}
+
+function renderNext(){
+  const up=dated().filter(i=>i.kind==="due"&&i.d>now&&!S.done[i.id]);
+  const el=$("next");
+  if(!up.length){el.innerHTML="<div class='what'><b>Nothing dated left on the board.</b></div>";return}
+  const it=up[0],n=daysLeft(it.d);
+  el.innerHTML=`<div class="big">${n<=0?"Today":n}${n>0?`<small>day${n==1?"":"s"}</small>`:""}</div>
+  <div class="what"><div class="eyebrow">Next hand-in</div><b>${esc(it.mod)}: ${esc(it.title)}</b><span class="mono" style="color:var(--muted)">${fmtD(it.d)}${it.time?" · "+fmtT(it.d):""}</span></div>`;
+}
+
+function renderCrunch(){
+  const el=$("crunch");
+  const up=dated().filter(i=>i.kind==="due"&&i.d>now&&!S.done[i.id]);
+  let best=null;
+  up.forEach((a,k)=>{const w=up.slice(k).filter(b=>daysLeft(b.d)-daysLeft(a.d)<=7);if(w.length>=3&&(!best||w.length>best.length))best=w});
+  if(!best){el.hidden=true;return}
+  const a=best[0].d,b=best[best.length-1].d,span=daysLeft(b)-daysLeft(a);
+  const mon=d=>d.toLocaleDateString("en-GB",{month:"long"});
+  const range=span===0?`${a.getDate()} ${mon(a)}`:a.getMonth()===b.getMonth()?`${a.getDate()}–${b.getDate()} ${mon(b)}`:`${a.getDate()} ${mon(a)} – ${b.getDate()} ${mon(b)}`;
+  const list=best.map(i=>`${esc(i.mod)}: ${esc(i.title)} (${fmtD(i.d)})`).join("; ");
+  el.innerHTML=`<b>Crunch ${span===0?"day":"week"}: ${range}.</b> ${best.length} hand-ins land ${span===0?"on the same day":`within ${span+1} days`}: ${list}. Try to get at least one of them mostly done before ${fmtD(a)}.`;
+  el.hidden=false;
+}
+
+function renderCal(){
+  const s=new Date(startToday);s.setDate(s.getDate()-((s.getDay()+6)%7));
+  const ds=dated();
+  let h="<div></div>"+["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d=>`<div class="dh">${d}</div>`).join("");
+  for(let w=0;w<6;w++){
+    const ws=new Date(s);ws.setDate(s.getDate()+w*7);
+    h+=`<div class="wk mono">${ws.toLocaleDateString("en-GB",{day:"numeric",month:"short"})}</div>`;
+    for(let k=0;k<7;k++){
+      const d=new Date(ws);d.setDate(ws.getDate()+k);
+      const n=daysLeft(d);
+      const its=ds.filter(i=>daysLeft(i.d)===n);
+      const cls=["day",n<0?"past":"",n===0?"today":"",its.filter(i=>i.kind!=="info").length>=2?"hot":""].join(" ");
+      h+=`<div class="${cls}"><span class="n">${d.getDate()}${d.getDate()==1||(w==0&&k==0)?" "+d.toLocaleDateString("en-GB",{month:"short"}):""}</span>${its.map(i=>`<span class="chip ${S.done[i.id]?"g":sev(i)}" title="${esc(i.mod)}: ${esc(i.title)}">${esc(shortOf(i))}</span>`).join("")}</div>`;
+    }
+  }
+  $("cal").innerHTML=h;
+}
+
+function renderList(){
+  const groups=[["Within 7 days",i=>i.d&&daysLeft(i.d)<=7],["8 to 21 days",i=>i.d&&daysLeft(i.d)>7&&daysLeft(i.d)<=21],["Later",i=>i.d&&daysLeft(i.d)>21],["Date not set yet",i=>!i.d]];
+  const colors={r:"var(--red)",a:"var(--amber)",g:"var(--green)",i:"var(--accent)",t:"var(--line)"};
+  const ord=[...dated(),...V.filter(i=>!i.d)];
+  $("list").innerHTML=groups.map(([name,f])=>{
+    const its=ord.filter(f).filter(i=>!i.d||daysLeft(i.d)>=0);
+    if(!its.length)return"";
+    return `<div class="group"><h3>${name}</h3>${its.map(i=>{
+      const sv=i.d?sev(i):"t",n=i.d?daysLeft(i.d):null;
+      return `<div class="item ${S.done[i.id]?"done":""}"><div class="sev" style="background:${colors[sv]}"></div>
+      <div class="t"><b>${esc(i.title)}${i.kind==="info"?'<span class="pill">info</span>':""}</b><span>${esc(i.mod)}${i.note?" · "+esc(i.note):""}</span>
+      ${i.kind!=="due"?"":`<label class="tick"><input type="checkbox" data-id="${esc(i.id)}" ${S.done[i.id]?"checked":""}> Submitted</label>`}</div>
+      <div class="when">${i.d?`<div class="c" style="color:${colors[sv]}">${n===0?"Today":n+"d"}</div><div class="d">${fmtD(i.d)}${i.time?" "+fmtT(i.d):""}</div>`:`<div class="d">TBC</div>`}</div></div>`}).join("")}</div>`;
+  }).join("");
+  document.querySelectorAll(".tick input").forEach(cb=>cb.addEventListener("change",e=>{S.done[e.target.dataset.id]=e.target.checked;persist();renderAll()}));
+}
+
+function partColors(parts){
+  // Exams take the accent colour (or the biggest part if there is no exam); the rest cycle amber, green, red.
+  let main=parts.findIndex(p=>/exam/i.test(p[0]));
+  if(main<0)main=parts.reduce((b,p,k)=>p[1]>parts[b][1]?k:b,0);
+  const rest=["var(--amber)","var(--green)","var(--red)","var(--muted)"];let r=0;
+  return parts.map((p,k)=>k===main?"var(--accent)":rest[(r++)%rest.length]);
+}
+function renderMods(){
+  $("mods").innerHTML=S.modules.map(m=>{
+    let extra="";
+    if(m.quiz&&m.quiz.length){const t=m.quiz.reduce((a,b)=>a+b,0),mx=m.quizMax||Math.max(...m.quiz,1);
+      extra=`<div><div class="eyebrow" style="margin-bottom:6px">Quiz scores so far · ${t}/${m.quiz.length*mx}</div><div class="quiz">${m.quiz.map(q=>{const c=q>=mx?"green":q/mx>=.5?"amber":"red";return `<i style="background:var(--${c}-soft);color:var(--${c})">${q}</i>`}).join("")}</div></div>`}
+    const parts=m.parts||[],cols=partColors(parts);
+    return `<div class="mod"><b>${esc(m.name)}</b>
+    ${parts.length?`<div class="bar">${parts.map((p,k)=>`<div style="flex:${p[1]};background:${cols[k]}">${p[1]}%</div>`).join("")}</div>
+    <ul>${parts.map(p=>`<li><span>${esc(p[0])}</span><span>${p[1]}%</span></li>`).join("")}</ul>`:""}${extra}${m.note?`<div class="note">${esc(m.note)}</div>`:""}</div>`}).join("");
+}
+
+function renderAll(){
+  now=new Date();
+  startToday=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  derive();renderHeader();
+  if(!S.items.length&&!S.modules.length){$("crunch").hidden=true;return}
+  renderNext();renderCrunch();renderCal();renderList();renderMods();
+}
+
+/* ===== Quick converter (rule-based) ===== */
+const MONTHS=["january","february","march","april","may","june","july","august","september","october","november","december"];
+const NOT_MONTH=/^(mark|marks|marked|marking|maybe|mayor|decide|decided|decision|junior|novel|novice|augment|octet|apriori)$/i;
+function monthOf(w){w=w.toLowerCase().replace(/\.$/,"");if(w.length<3||NOT_MONTH.test(w))return -1;const k=MONTHS.findIndex(m=>m.startsWith(w.slice(0,3)));if(k<0)return -1;return(w.length<=4||Math.abs(w.length-MONTHS[k].length)<=2)?k:-1}
+const ymd=(y,m,d)=>`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+function guessYear(m,d){const t=new Date();let y=t.getFullYear();if((t-new Date(y,m,d))/DAY>120)y++;return y}
+function findDate(s){
+  let m=s.match(/\b(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4}|\d{2})\b/);
+  if(m){let y=+m[3];if(y<100)y+=2000;const mo=+m[2]-1,d=+m[1];if(mo>=0&&mo<12&&d>=1&&d<=31)return{date:ymd(y,mo,d),text:m[0]}}
+  for(const x of s.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?\s*(?:of\s+)?([A-Za-z]{3,}\.?)(?:,?\s+(\d{4}))?/g)){const mo=monthOf(x[2]),d=+x[1];if(mo>=0&&d>=1&&d<=31)return{date:ymd(x[3]?+x[3]:guessYear(mo,d),mo,d),text:x[0]}}
+  for(const x of s.matchAll(/\b([A-Za-z]{3,}\.?)\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s+(\d{4}))?/g)){const mo=monthOf(x[1]),d=+x[2];if(mo>=0&&d>=1&&d<=31)return{date:ymd(x[3]?+x[3]:guessYear(mo,d),mo,d),text:x[0]}}
+  return null;
+}
+function findTime(s){
+  let m=s.match(/\b(\d{1,2})[:.](\d{2})\s*(am|pm)?\b/i)||s.match(/\b(\d{1,2})()\s*(am|pm)\b/i);
+  if(!m)return null;let h=+m[1];const mi=+(m[2]||0),ap=(m[3]||"").toLowerCase();
+  if(ap==="pm"&&h<12)h+=12;if(ap==="am"&&h===12)h=0;if(h>23||mi>59)return null;
+  return{time:`${String(h).padStart(2,"0")}:${String(mi).padStart(2,"0")}`,text:m[0]};
+}
+function clean(s,remove){
+  (remove||[]).forEach(r=>{if(r)s=s.replace(r,"")});
+  s=s.replace(/[\(\[]\s*\d{1,3}\s*%[^\)\]]*[\)\]]/g,"").replace(/\d{1,3}\s*%/g,"").replace(/\b(TBC|TBA)\b/gi,"")
+     .replace(/[\(\[]\s*[\)\]]/g,"").replace(/[\[\]\(\)]/g," ").replace(/\s+/g," ")
+     .replace(/^[\s,:;\-–—.]+|[\s,:;\-–—.]+$/g,"").replace(/[,\s]+(due|deadline|by|on|at)$/i,"").replace(/[\s,:;\-–—.]+$/,"").trim();
+  return s?s[0].toUpperCase()+s.slice(1):s;
+}
+const words=(s,n)=>s.split(/\s+/).slice(0,n).join(" ");
+const chars=(s,n)=>s.length>n?s.slice(0,n-1).trim()+"…":s;
+function tidyMod(s){s=s.replace(/[:.\s]+$/,"").trim();if(s.length>3&&s===s.toUpperCase())s=s[0]+s.slice(1).toLowerCase();return s[0].toUpperCase()+s.slice(1)}
+const FILLER=/^((released?|due|deadline|submission|submit|hand[- ]?in|by|out)\s*)*$/i;
+const DELIVER=/coursework|assignment|practical|project|essay|report|viva|presentation|\blab\b|exercise|submission|hand[- ]?in|draft/i;
+
+function quickParse(text){
+  const items=[],mods=new Map();let mod="General",pending=null;
+  const M=n=>{const k=n.toLowerCase();if(!mods.has(k))mods.set(k,{name:n,parts:[],quiz:[],note:""});return mods.get(k)};
+  const frags=[];
+  text.split(/\r?\n/).forEach(line=>{const raw=line.trim();if(!raw)return;const b=/^[*\-•▶·>+]/.test(raw);
+    raw.split(/[•▶]/).forEach((f,k)=>{f=f.replace(/^[\s*\-·>+]+/,"").trim();if(f)frags.push({s:f,bullet:b||k>0})})});
+  for(const {s,bullet} of frags){
+    const seq=s.match(/\d+(?:\s*,\s*\d+){2,}/);
+    if(seq&&/quiz|score|mark|current|result/i.test(s)){M(mod).quiz=seq[0].split(",").map(Number);continue}
+    const dt=findDate(s),tm=findTime(dt?s.replace(dt.text,""):s);
+    const pcts=[...s.matchAll(/(\d{1,3})\s*%(?!\s*of\b)/gi)];
+    // A short line on its own with no numbers is a module heading ("AI", "Machine Learning :")
+    if(!bullet&&!dt&&!pcts.length&&/^[A-Za-z][A-Za-z &\/.'’-]*\s*:?\.?$/.test(s)&&s.split(/\s+/).length<=4){mod=tidyMod(s);pending=null;continue}
+    // Several percentages on one line = a weighting breakdown ("Project 85% dissertation, 10% conduct")
+    if(pcts.length>=2&&!dt){
+      const pre=s.slice(0,s.search(/\d/)).trim();
+      if(!bullet&&/[A-Za-z]/.test(pre)){mod=tidyMod(pre);pending=null}
+      const m=M(mod);
+      s.split(/,|;|\band\b|\+/).forEach(seg=>{const p=seg.match(/(\d{1,3})\s*%/);if(!p)return;let lab=seg.replace(p[0],"");if(pre)lab=lab.replace(pre,"");lab=clean(lab);if(lab)m.parts.push([words(lab,4),+p[1]])});
+      continue;
+    }
+    const pct=pcts.length?+pcts[0][1]:null;
+    if(pct!=null){
+      const rm=[dt&&dt.text,tm&&tm.text];
+      const lab=clean(s.slice(0,pcts[0].index),rm)||clean(s.slice(pcts[0].index+pcts[0][0].length),rm);
+      if(lab)M(mod).parts.push([words(lab,5),pct]);
+    }
+    const title=clean(s,[dt&&dt.text,tm&&tm.text]);
+    if(dt&&FILLER.test(title)){pending=dt.date;continue} // a bare "DUE 27th November" line: give the date to the next item
+    let date=dt?dt.date:null;
+    if(!date&&pending&&(pct!=null||DELIVER.test(s))){date=pending;pending=null}
+    const note=pct!=null?`${pct}% of ${mod}`:"";
+    if(date){items.push({mod,title:chars(title,80)||"Deadline",note,date,time:tm?tm.time:"",kind:/\brelease[ds]?\b|\bpublished\b|\bavailable\b/i.test(s)?"info":"due"});continue}
+    if(pct!=null&&/quiz/i.test(s)){items.push({mod,title:chars(title,80),note:note+(/week/i.test(s)?", every week":""),kind:"note"});continue}
+    if(pct!=null&&DELIVER.test(s)&&!/exam/i.test(s))items.push({mod,title:chars(title,80),note,kind:"due"});
+  }
+  const seen=new Set();
+  const out=items.filter(i=>{if(!i.date)return true;const k=[i.mod.toLowerCase(),i.date,i.time,i.kind].join("|");if(seen.has(k))return false;seen.add(k);return true});
+  return normalize({items:out,modules:[...mods.values()].filter(m=>m.parts.length||m.quiz.length)});
+}
+
+function normalize(r){
+  const items=(Array.isArray(r&&r.items)?r.items:[]).map(x=>({id:uid(),mod:str(x.mod)||"General",title:str(x.title)||"Untitled",note:str(x.note),
+    date:/^\d{4}-\d{2}-\d{2}$/.test(str(x.date))?str(x.date):"",time:/^\d{2}:\d{2}$/.test(str(x.time))?str(x.time):"",
+    kind:["due","info","note"].includes(x.kind)?x.kind:"due"}));
+  const modules=(Array.isArray(r&&r.modules)?r.modules:[]).map(m=>({name:str(m.name)||"Module",
+    parts:(Array.isArray(m.parts)?m.parts:[]).filter(p=>Array.isArray(p)&&p.length>=2).map(p=>[str(p[0])||"Part",Math.max(0,Math.min(100,Math.round(+p[1]||0)))]).filter(p=>p[1]>0),
+    quiz:(Array.isArray(m.quiz)?m.quiz:[]).map(Number).filter(n=>Number.isFinite(n)),quizMax:+m.quizMax||0,note:str(m.note)}));
+  return{items,modules};
+}
+
+/* ===== AI converter (viewer's own Anthropic key) ===== */
+async function aiParse(text,key){
+  const today=new Date().toISOString().slice(0,10);
+  const prompt=`Today is ${today}. Turn these student notes about modules, assessments and deadlines into JSON.
+Return ONLY a JSON object, no prose and no code fences, shaped exactly like:
+{"items":[{"mod":"Module name","title":"Short name of the deliverable or event","note":"Weight or one key detail, e.g. 25% of Machine Learning","date":"YYYY-MM-DD, or \\"\\" if not known","time":"HH:MM 24-hour, or \\"\\" if no time given","kind":"due | info | note"}],
+ "modules":[{"name":"Module name","parts":[["Exam",70],["Coursework",30]],"quiz":[2,2,1],"quizMax":2,"note":"One useful sentence, or \\"\\""}]}
+Rules:
+- kind "due": something the student hands in or attends (coursework, essay, report, viva, practical, presentation). Use date "" when no date is known yet.
+- kind "info": a dated event that is not a hand-in (specification released, feedback released).
+- kind "note": undated items that shouldn't get a "submitted" tickbox, such as weekly quizzes or final exams with no date.
+- Dates without a year: choose the year that makes the date fall on or after about four months before today.
+- Fix typos in month names. Use clear, consistent module names with tidy capitalisation; expand an abbreviation only when its meaning is obvious.
+- Never list the same deadline twice. Don't invent deadlines that aren't in the notes.
+- "parts" are the module's assessment weightings in percent. Include "quiz" only if quiz scores are listed, and "quizMax" if the maximum score per quiz is known.
+Notes:
+"""
+${text}
+"""`;
+  const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+    body:JSON.stringify({model:"claude-haiku-5-5",max_tokens:4000,messages:[{role:"user",content:prompt}]})});
+  const body=await res.json().catch(()=>({}));
+  if(!res.ok)throw new Error(body?.error?.message||`HTTP ${res.status}`);
+  const out=(body.content||[]).map(c=>c.text||"").join("");
+  const a=out.indexOf("{"),b=out.lastIndexOf("}");
+  if(a<0||b<a)throw new Error("Claude didn't return any data.");
+  return normalize(JSON.parse(out.slice(a,b+1)));
+}
+
+/* ===== Editor ===== */
+let D;
+const partsText=p=>(p||[]).map(x=>`${x[0]} ${x[1]}`).join(", ");
+const textParts=t=>t.split(",").map(s=>s.trim().match(/^(.*?)\s*[:\-]?\s*(\d{1,3})\s*%?$/)).filter(Boolean).map(m=>[m[1].trim()||"Part",Math.min(100,+m[2])]).filter(p=>p[1]>0);
+const KINDS=[["due","Hand-in"],["info","Info only"],["note","No tickbox"]];
+function itemRow(it,i){return `<div class="row" data-i="${i}">
+  <select data-f="kind" aria-label="Type">${KINDS.map(([v,l])=>`<option value="${v}"${it.kind===v?" selected":""}>${l}</option>`).join("")}</select>
+  <input data-f="mod" value="${esc(it.mod)}" placeholder="Module" list="modlist" aria-label="Module">
+  <input data-f="title" class="wide" value="${esc(it.title)}" placeholder="What is it?" aria-label="What is it">
+  <input data-f="date" type="date" value="${esc(it.date)}" aria-label="Due date">
+  <input data-f="time" type="time" value="${esc(it.time)}" aria-label="Time">
+  <input data-f="note" class="wide" value="${esc(it.note)}" placeholder="Weight or note" aria-label="Weight or note">
+  <button class="x" type="button" aria-label="Delete">×</button></div>`}
+function modRow(m,i){return `<div class="row m" data-i="${i}">
+  <input data-f="name" value="${esc(m.name)}" placeholder="Module" aria-label="Module">
+  <input data-f="parts" class="wide" value="${esc(partsText(m.parts))}" placeholder="Exam 70, Coursework 30" aria-label="Weightings">
+  <input data-f="quiz" value="${esc((m.quiz||[]).join(","))}" placeholder="Quiz scores" aria-label="Quiz scores">
+  <input data-f="note" class="wide" value="${esc(m.note)}" placeholder="Note (optional)" aria-label="Note">
+  <button class="x" type="button" aria-label="Delete">×</button></div>`}
+function renderEd(){
+  $("edLabel").value=D.label||"";
+  $("edItems").innerHTML=(D.items.length?`<div class="row hd"><span>Type</span><span>Module</span><span>What</span><span>Due date</span><span>Time</span><span>Weight / note</span><span></span></div>`:`<div class="note">No deadlines yet. Paste notes above and press Convert, or add one by hand.</div>`)+D.items.map(itemRow).join("");
+  $("edMods").innerHTML=(D.modules.length?`<div class="row m hd"><span>Module</span><span>Weightings</span><span>Quiz scores</span><span>Note</span><span></span></div>`:`<div class="note">No modules yet.</div>`)+D.modules.map(modRow).join("");
+  const names=new Set([...D.modules.map(m=>m.name),...D.items.map(i=>i.mod)].filter(Boolean));
+  $("modlist").innerHTML=[...names].map(n=>`<option value="${esc(n)}">`).join("");
+}
+function status(msg,cls){const el=$("status");el.textContent=msg;el.className="status"+(cls?" "+cls:"")}
+function merge(r){
+  D.items.push(...r.items);
+  r.modules.forEach(m=>{const x=D.modules.find(y=>y.name.toLowerCase()===m.name.toLowerCase());
+    if(!x)D.modules.push(m);else{if(m.parts.length)x.parts=m.parts;if(m.quiz.length){x.quiz=m.quiz;x.quizMax=m.quizMax}if(m.note)x.note=m.note}});
+  renderEd();
+  const dn=r.items.filter(i=>i.date).length;
+  status(r.items.length||r.modules.length?`Found ${r.items.length} deadline${r.items.length==1?"":"s"} (${dn} with dates) and weightings for ${r.modules.length} module${r.modules.length==1?"":"s"}. Check them below, fix anything wrong, then save.`:"Couldn't find any dates or percentages in that text. Try putting each module's name on its own line, or add deadlines by hand.",r.items.length||r.modules.length?"ok":"err");
+}
+function openEditor(focusPaste){D=clone(S);try{$("apikey").value=localStorage.getItem("deadline-board-key")||""}catch(e){}status("");renderEd();$("ed").showModal();if(focusPaste)$("paste").focus()}
+
+$("edItems").addEventListener("input",e=>{const r=e.target.closest("[data-i]"),f=e.target.dataset.f;if(r&&f)D.items[+r.dataset.i][f]=e.target.value});
+$("edItems").addEventListener("change",e=>{const r=e.target.closest("[data-i]"),f=e.target.dataset.f;if(r&&f)D.items[+r.dataset.i][f]=e.target.value});
+$("edItems").addEventListener("click",e=>{if(!e.target.closest(".x"))return;D.items.splice(+e.target.closest("[data-i]").dataset.i,1);renderEd()});
+$("edMods").addEventListener("input",e=>{const r=e.target.closest("[data-i]"),f=e.target.dataset.f;if(!r||!f)return;const m=D.modules[+r.dataset.i],v=e.target.value;
+  if(f==="parts")m.parts=textParts(v);else if(f==="quiz"){m.quiz=v.split(/[,\s]+/).filter(Boolean).map(Number).filter(Number.isFinite);m.quizMax=0}else m[f]=v});
+$("edMods").addEventListener("click",e=>{if(!e.target.closest(".x"))return;D.modules.splice(+e.target.closest("[data-i]").dataset.i,1);renderEd()});
+$("edLabel").addEventListener("input",e=>{D.label=e.target.value});
+$("addItem").onclick=()=>{D.items.push({id:uid(),mod:D.modules[0]?.name||"",title:"",note:"",date:"",time:"",kind:"due"});renderEd();$("edItems").querySelector(".row:last-child [data-f=title]").focus()};
+$("addMod").onclick=()=>{D.modules.push({name:"",parts:[],quiz:[],note:""});renderEd();$("edMods").querySelector(".row:last-child [data-f=name]").focus()};
+$("convertBtn").onclick=()=>{const t=$("paste").value.trim();if(!t){status("Paste some notes first.","err");return}merge(quickParse(t))};
+$("clearPaste").onclick=()=>{$("paste").value="";$("paste").focus()};
+$("aiBtn").onclick=async()=>{
+  const t=$("paste").value.trim(),key=$("apikey").value.trim();
+  if(!t){status("Paste some notes first.","err");return}
+  if(!key){status("Add your Anthropic API key first, or use the quick Convert.","err");$("apikey").focus();return}
+  try{localStorage.setItem("deadline-board-key",key)}catch(e){}
+  $("aiBtn").disabled=true;status("Claude is reading your notes…");
+  try{merge(await aiParse(t,key))}catch(err){status("AI conversion failed: "+err.message,"err")}finally{$("aiBtn").disabled=false}
+};
+$("forgetKey").onclick=()=>{try{localStorage.removeItem("deadline-board-key")}catch(e){}$("apikey").value="";status("Key removed from this browser.","ok")};
+$("edCancel").onclick=()=>$("ed").close();
+$("edSave").onclick=()=>{
+  D.items=D.items.filter(i=>str(i.title)||str(i.mod)).map(i=>({...i,title:str(i.title)||"Untitled",mod:str(i.mod)||"General",note:str(i.note)}));
+  D.modules=D.modules.filter(m=>str(m.name)).map(m=>({...m,name:str(m.name),note:str(m.note)}));
+  const ids=new Set(D.items.map(i=>i.id));Object.keys(D.done).forEach(k=>{if(!ids.has(k))delete D.done[k]});
+  S=D;persist();$("ed").close();renderAll();
+};
+$("loadExample").onclick=()=>{if((D.items.length||D.modules.length)&&!confirm("Replace what's in the editor with the example board?"))return;D=clone(EXAMPLE);renderEd();status("Example loaded. Save to put it on the board.","ok")};
+$("clearAll").onclick=()=>{if(!confirm("Remove every deadline and module? (Nothing is deleted until you press Save.)"))return;D=blank();renderEd();status("Cleared. Press Save to make it stick, or Cancel to undo.","ok")};
+
+/* ===== Moving a board between devices ===== */
+const b64e=s=>{const b=new TextEncoder().encode(s);let o="";for(let i=0;i<b.length;i++)o+=String.fromCharCode(b[i]);return btoa(o).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"")};
+const b64d=s=>{const bin=atob(s.replace(/-/g,"+").replace(/_/g,"/"));return new TextDecoder().decode(Uint8Array.from(bin,c=>c.charCodeAt(0)))};
+const portable=b=>({label:b.label,items:b.items,modules:b.modules,done:b.done||{}});
+$("copyLink").onclick=async()=>{
+  const url=location.origin+location.pathname+"#d="+b64e(JSON.stringify(portable(D)));
+  try{await navigator.clipboard.writeText(url);status("Link copied. Open it on your other device to load this board there.","ok")}catch(e){prompt("Copy this link:",url)}
+};
+$("backup").onclick=()=>{
+  const blob=new Blob([JSON.stringify(portable(D),null,2)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="deadline-board.json";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+};
+$("restore").onclick=()=>$("restoreFile").click();
+$("restoreFile").onchange=async e=>{
+  const f=e.target.files[0];e.target.value="";if(!f)return;
+  try{const d=JSON.parse(await f.text());if(!Array.isArray(d.items))throw 0;D={...blank(),...d,done:d.done||{}};renderEd();status("Backup loaded. Press Save to use it.","ok")}catch(err){status("That file isn't a deadline board backup.","err")}
+};
+function loadFromHash(){
+  if(!location.hash.startsWith("#d="))return;
+  try{const d=JSON.parse(b64d(location.hash.slice(3)));
+    if(d&&Array.isArray(d.items)){const has=S.items.length||S.modules.length;
+      if(!has||confirm("Replace the board saved in this browser with the one from this link?")){S={...blank(),...d,done:d.done||{}};persist()}}
+  }catch(e){alert("The board in that link couldn't be read.")}
+  history.replaceState(null,"",location.pathname+location.search);
+}
+
+/* ===== Start ===== */
+$("editBtn").onclick=()=>openEditor(!S.items.length&&!S.modules.length);
+$("startBtn").onclick=()=>openEditor(true);
+$("exampleBtn").onclick=()=>{S=clone(EXAMPLE);persist();renderAll()};
+loadFromHash();
+renderAll();
+// Keep it current if the tab stays open past midnight or you come back to it later
+setInterval(renderAll,60*1000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)renderAll()});
+</script>
+</body>
+</html>
